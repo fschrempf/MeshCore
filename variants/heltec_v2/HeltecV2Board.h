@@ -64,4 +64,8 @@ public:
   const char* getManufacturerName() const override {
     return "Heltec V2";
   }
+
+  uint32_t getIRQGpio() override {
+    return P_LORA_DIO_0; // default for SX1276
+  }
 };

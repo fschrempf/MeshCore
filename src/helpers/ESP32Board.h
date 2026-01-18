@@ -56,20 +56,10 @@ public:
     return raw / 4;
   }
 
-  uint32_t getIRQGpio() {
-#if defined(RADIO_SX1276) && defined(P_LORA_DIO_0) // SX1276
-    return P_LORA_DIO_0;
-#elif defined(P_LORA_DIO_1) // SX1262
-    return P_LORA_DIO_1;
-#else
-    return -1; // Not found
-#endif
-  }
-
   bool safeToSleep() {
     // Check for RX status
-    gpio_num_t wakeupPin=(gpio_num_t) getIRQGpio();
-    if(digitalRead(wakeupPin) == HIGH) {
+    gpio_num_t wakeupPin = (gpio_num_t)getIRQGpio();
+    if (digitalRead(wakeupPin) == HIGH) {
       return false;
     }
 
@@ -77,24 +67,24 @@ public:
     wifi_mode_t mode;
     esp_err_t err = esp_wifi_get_mode(&mode);
 
-    if (err == ESP_OK) {  // WiFi is on
+    if (err == ESP_OK) { // WiFi is on
       return false;
     }
 
     // Safe to sleep
-    return true; 
+    return true;
   }
 
   void sleep(uint32_t secs) override {
     // Skip if not safe to sleep
-    if(!safeToSleep()) {
+    if (!safeToSleep()) {
       return;
     }
-    
+
     // Configure GPIO wakeup
-    gpio_num_t wakeupPin=(gpio_num_t) getIRQGpio();
+    gpio_num_t wakeupPin = (gpio_num_t)getIRQGpio();
     esp_sleep_enable_gpio_wakeup();
-    gpio_wakeup_enable((gpio_num_t) wakeupPin, GPIO_INTR_HIGH_LEVEL); // Wake up when receiving a LoRa packet
+    gpio_wakeup_enable((gpio_num_t)wakeupPin, GPIO_INTR_HIGH_LEVEL); // Wake up when receiving a LoRa packet
 
     // Configure timer wakeup
     if (secs > 0) {
@@ -110,7 +100,7 @@ public:
     // Avoid ISR flood during wakeup due to HIGH LEVEL interrupt
     gpio_set_intr_type(wakeupPin, GPIO_INTR_POSEDGE);
 
-     // Enable CPU interrupt servicing
+    // Enable CPU interrupt servicing
     interrupts();
   }
 
