@@ -14,6 +14,9 @@ public:
   virtual uint8_t getStartupReason() const override { return startup_reason; }
   virtual float getMCUTemperature() override;
   virtual void reboot() override { NVIC_SystemReset(); }
+  virtual uint32_t getIRQGpio() override;
+  virtual bool safeToSleep() override;
+  virtual void sleep(uint32_t secs) override;
 };
 
 /*

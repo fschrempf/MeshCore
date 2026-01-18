@@ -56,29 +56,62 @@ public:
     return raw / 4;
   }
 
-  void enterLightSleep(uint32_t secs) {
-#if defined(CONFIG_IDF_TARGET_ESP32S3) && defined(P_LORA_DIO_1) // Supported ESP32 variants
-    if (rtc_gpio_is_valid_gpio((gpio_num_t)P_LORA_DIO_1)) { // Only enter sleep mode if P_LORA_DIO_1 is RTC pin
-      esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
-      esp_sleep_enable_ext1_wakeup((1L << P_LORA_DIO_1), ESP_EXT1_WAKEUP_ANY_HIGH); // To wake up when receiving a LoRa packet
-
-      if (secs > 0) {
-        esp_sleep_enable_timer_wakeup(secs * 1000000); // To wake up every hour to do periodically jobs
-      }
-
-      esp_light_sleep_start(); // CPU enters light sleep
-    }
+  uint32_t getIRQGpio() {
+#if defined(RADIO_SX1276) && defined(P_LORA_DIO_0) // SX1276
+    return P_LORA_DIO_0;
+#elif defined(P_LORA_DIO_1) // SX1262
+    return P_LORA_DIO_1;
+#else
+    return -1; // Not found
 #endif
   }
 
-  void sleep(uint32_t secs) override {
-    // To check for WiFi status to see if there is active OTA
+  bool safeToSleep() {
+    // Check for RX status
+    gpio_num_t wakeupPin=(gpio_num_t) getIRQGpio();
+    if(digitalRead(wakeupPin) == HIGH) {
+      return false;
+    }
+
+    // Check for WiFi status to see if there is active OTA
     wifi_mode_t mode;
     esp_err_t err = esp_wifi_get_mode(&mode);
-    
-    if (err != ESP_OK) {          // WiFi is off ~ No active OTA, safe to go to sleep
-      enterLightSleep(secs);      // To wake up after "secs" seconds or when receiving a LoRa packet
+
+    if (err == ESP_OK) {  // WiFi is on
+      return false;
     }
+
+    // Safe to sleep
+    return true; 
+  }
+
+  void sleep(uint32_t secs) override {
+    // Skip if not safe to sleep
+    if(!safeToSleep()) {
+      return;
+    }
+    
+    // Configure GPIO wakeup
+    gpio_num_t wakeupPin=(gpio_num_t) getIRQGpio();
+    esp_sleep_enable_gpio_wakeup();
+    gpio_wakeup_enable((gpio_num_t) wakeupPin, GPIO_INTR_HIGH_LEVEL); // Wake up when receiving a LoRa packet
+
+    // Configure timer wakeup
+    if (secs > 0) {
+      esp_sleep_enable_timer_wakeup(secs * 1000000ULL); // Wake up periodically to do scheduled jobs
+    }
+
+    // Disable CPU interrupt servicing
+    noInterrupts();
+
+    // MCU enters light sleep
+    esp_light_sleep_start();
+
+    // Avoid ISR flood during wakeup due to HIGH LEVEL interrupt
+    gpio_set_intr_type(wakeupPin, GPIO_INTR_POSEDGE);
+
+     // Enable CPU interrupt servicing
+    interrupts();
   }
 
   uint8_t getStartupReason() const override { return startup_reason; }
